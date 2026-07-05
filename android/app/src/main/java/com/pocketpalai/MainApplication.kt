@@ -29,6 +29,7 @@ class MainApplication : Application(), ReactApplication {
               add(HardwareInfoPackage())
               add(StorefrontPackage())
               add(DownloadPackage())
+              add(CompaNativePackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

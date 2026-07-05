@@ -1,7 +1,8 @@
 import {appSchema, tableSchema} from '@nozbe/watermelondb';
+import {compaTableSchemas} from './compaSchema';
 
 export default appSchema({
-  version: 7,
+  version: 8,
   tables: [
     tableSchema({
       name: 'chat_sessions',
@@ -130,5 +131,6 @@ export default appSchema({
         {name: 'updated_at', type: 'number'},
       ],
     }),
+    ...compaTableSchemas,
   ],
 });

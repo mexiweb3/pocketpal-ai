@@ -2,7 +2,9 @@ import {
   schemaMigrations,
   createTable,
   addColumns,
+  unsafeExecuteSql,
 } from '@nozbe/watermelondb/Schema/migrations';
+import {COMPA_SCHEMA_SQL} from './compaSchema';
 
 export default schemaMigrations({
   migrations: [
@@ -142,6 +144,10 @@ export default schemaMigrations({
           ],
         }),
       ],
+    },
+    {
+      toVersion: 8,
+      steps: [unsafeExecuteSql(COMPA_SCHEMA_SQL)],
     },
   ],
 });

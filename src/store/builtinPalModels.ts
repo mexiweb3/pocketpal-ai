@@ -2,6 +2,66 @@ import {HuggingFaceModel, Model, ModelOrigin, ModelType} from '../utils/types';
 import {chatTemplates} from '../utils/chat';
 import {defaultCompletionParams} from '../utils/completionSettingsVersions';
 
+const LUNA_QWEN_REPO = 'Qwen/Qwen2.5-3B-Instruct-GGUF';
+const LUNA_QWEN_FILENAME = 'qwen2.5-3b-instruct-q4_k_m.gguf';
+
+export const LUNA_QWEN_MODEL_ID = `${LUNA_QWEN_REPO}/${LUNA_QWEN_FILENAME}`;
+
+const LUNA_QWEN_HF_MODEL = {
+  id: LUNA_QWEN_REPO,
+  author: 'Qwen',
+  url: `https://huggingface.co/${LUNA_QWEN_REPO}`,
+  specs: {gguf: {total: 3085938688}},
+  siblings: [
+    {
+      rfilename: LUNA_QWEN_FILENAME,
+      url: `https://huggingface.co/${LUNA_QWEN_REPO}/resolve/main/${LUNA_QWEN_FILENAME}`,
+      size: 2080000000,
+    },
+  ],
+} as unknown as HuggingFaceModel;
+
+export const LUNA_QWEN_MODEL: Model = {
+  id: LUNA_QWEN_MODEL_ID,
+  author: 'Qwen',
+  repo: 'Qwen2.5-3B-Instruct-GGUF',
+  name: 'Qwen2.5 3B Instruct (Q4_K_M)',
+  type: 'Qwen2.5',
+  capabilities: ['instructions', 'questionAnswering', 'multilingual'],
+  size: 2080000000,
+  params: 3085938688,
+  isDownloaded: false,
+  downloadUrl: `https://huggingface.co/${LUNA_QWEN_REPO}/resolve/main/${LUNA_QWEN_FILENAME}`,
+  hfUrl: `https://huggingface.co/${LUNA_QWEN_REPO}`,
+  progress: 0,
+  filename: LUNA_QWEN_FILENAME,
+  isLocal: false,
+  origin: ModelOrigin.HF,
+  modelType: ModelType.LLM,
+  defaultChatTemplate: chatTemplates.qwen25,
+  chatTemplate: chatTemplates.qwen25,
+  defaultCompletionSettings: {
+    ...defaultCompletionParams,
+    n_predict: 180,
+    temperature: 0.8,
+  },
+  completionSettings: {
+    ...defaultCompletionParams,
+    n_predict: 180,
+    temperature: 0.8,
+  },
+  defaultStopWords: ['<|im_end|>', '<|endoftext|>'],
+  stopWords: ['<|im_end|>', '<|endoftext|>'],
+  hfModel: LUNA_QWEN_HF_MODEL,
+  hfModelFile: {
+    rfilename: LUNA_QWEN_FILENAME,
+    url: `https://huggingface.co/${LUNA_QWEN_REPO}/resolve/main/${LUNA_QWEN_FILENAME}`,
+    size: 2080000000,
+    canFitInStorage: true,
+  },
+  isRulePreset: false,
+};
+
 // The SmolVLM repo subset hfAsModel/addHFModel read: the LLM file plus both
 // mmproj siblings. Carrying this lets the download warning route through
 // downloadHFModel→addHFModel, which materializes the LLM + mmproj Models into

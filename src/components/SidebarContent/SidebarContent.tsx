@@ -15,6 +15,7 @@ import {
   ChatIcon,
   EditIcon,
   ModelIcon,
+  MoonIcon,
   PalIcon,
   SettingsIcon,
   ShareIcon,
@@ -495,6 +496,13 @@ export const SidebarContent: React.FC<DrawerContentComponentProps> = observer(
               onPress={() => props.navigation.navigate(ROUTES.CHAT)}
               style={styles.menuDrawerItem}
               testID="drawer-item-chat"
+            />
+            <Drawer.Item
+              label="Luna"
+              icon={() => <MoonIcon stroke={theme.colors.primary} />}
+              onPress={() => props.navigation.navigate(ROUTES.LUNA)}
+              style={styles.menuDrawerItem}
+              testID="drawer-item-luna"
             />
             <Drawer.Item
               label={l10n.components.sidebarContent.menuItems.pals}

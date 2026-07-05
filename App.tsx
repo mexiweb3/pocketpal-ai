@@ -37,6 +37,7 @@ import {MarkdownProvider} from './src/components/MarkdownView';
 import {AutomationBridge, BenchmarkRunnerScreen} from './src/__automation__';
 import {
   ChatScreen,
+  LunaScreen,
   ModelsScreen,
   SettingsScreen,
   BenchmarkScreen,
@@ -132,6 +133,14 @@ const App = observer(() => {
                             component={gestureHandlerRootHOC(ChatScreen)}
                             options={{
                               headerShown: false,
+                            }}
+                          />
+                          <Drawer.Screen
+                            name={ROUTES.LUNA}
+                            component={gestureHandlerRootHOC(LunaScreen)}
+                            options={{
+                              headerStyle: styles.headerWithoutDivider,
+                              title: 'Luna',
                             }}
                           />
                           <Drawer.Screen

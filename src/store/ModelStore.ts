@@ -51,6 +51,7 @@ import {
 
 import androidRulesRaw from './bundledDeviceRules/rules.android.json';
 import iosRulesRaw from './bundledDeviceRules/rules.ios.json';
+import {LUNA_QWEN_MODEL} from './builtinPalModels';
 
 // Bump when the migration logic that re-merges the persisted model list
 // changes. Crossing this version runs the one-time prune-and-reconcile.
@@ -565,6 +566,8 @@ class ModelStore {
     // background; reconcile (id-keyed, dedup) folds in any newer set.
     this.upgradeToFetchedRules();
 
+    this.ensureLunaQwenModel();
+
     await this.initializeGpuSettings(); // Should be awaited to ensure GPU settings are applied before initializing context
 
     // Initialize available memory ceiling at app startup if not set
@@ -597,6 +600,15 @@ class ModelStore {
 
     // Check if we need to reload an auto-released model (for app restarts)
     this.checkAndReloadAutoReleasedModel();
+  };
+
+  private ensureLunaQwenModel = () => {
+    if (this.models.some(model => model.id === LUNA_QWEN_MODEL.id)) {
+      return;
+    }
+    runInAction(() => {
+      this.models.push({...LUNA_QWEN_MODEL});
+    });
   };
 
   // Synthesize the minimal {hfModel, modelFile} pair the unchanged hfAsModel

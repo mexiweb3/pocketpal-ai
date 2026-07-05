@@ -28,11 +28,12 @@ import {resolveHFModelForDownload} from '../utils/hfResolve';
 import {isUSStorefront} from '../utils/region';
 import {palsHubService} from '../services';
 import {registerDefaultTalents} from '../services/talents';
-import {LOOKIE_DEFAULT_MODEL} from './builtinPalModels';
+import {LOOKIE_DEFAULT_MODEL, LUNA_QWEN_MODEL} from './builtinPalModels';
 import {chatTemplates} from '../utils/chat';
 import {defaultCompletionParams} from '../utils/completionSettingsVersions';
 import {parsePalsHubTemplate} from '../utils/palshub-template-parser';
 import {getDisplayNameFromFilename} from '../utils/formatters';
+import {buildSystemPrompt} from '../compa/prompts/systemPrompt';
 
 import type {Pal, ParameterDefinition} from '../types/pal';
 import type {
@@ -90,6 +91,9 @@ class PalStore {
 
       // Initialize Pip pal (idempotent — see initializePipPal).
       await this.initializePipPal();
+
+      // Initialize Luna companion pal for the on-device voice loop.
+      await this.initializeLunaPal();
 
       // Register talent engines (idempotent)
       registerDefaultTalents();
@@ -753,6 +757,7 @@ class PalStore {
         return;
       }
 
+      const systemPrompt = await buildSystemPrompt();
       const palData: Omit<Pal, 'id' | 'created_at' | 'updated_at'> = {
         type: 'local',
         name: 'Pip',
@@ -773,6 +778,47 @@ class PalStore {
       await this.addPal(palData);
     } catch (error) {
       console.error('Error initializing Pip pal:', error);
+    }
+  }
+
+  private async initializeLunaPal(): Promise<void> {
+    try {
+      const existing = this.pals.find(
+        p => p.name === 'Luna' && p.source === 'local',
+      );
+      if (existing) {
+        return;
+      }
+
+      const systemPrompt = await buildSystemPrompt();
+      const palData: Omit<Pal, 'id' | 'created_at' | 'updated_at'> = {
+        type: 'local',
+        name: 'Luna',
+        description:
+          'Companera de voz para Don Jesus que corre en el telefono.',
+        systemPrompt,
+        originalSystemPrompt: systemPrompt,
+        isSystemPromptChanged: false,
+        useAIPrompt: false,
+        defaultModel: LUNA_QWEN_MODEL,
+        parameters: {},
+        parameterSchema: [],
+        capabilities: {audio: true, memory: true, tools: true},
+        color: ['#19324A', '#D7EEF2'],
+        greeting: {
+          text: 'Buenas, Don Jesús. Soy Luna.',
+          suggestedPrompts: [
+            'Luna, platiquemos un momento',
+            'Que recordatorios tengo hoy',
+            'Que hora es',
+          ],
+        },
+        source: 'local',
+      };
+
+      await this.addPal(palData);
+    } catch (error) {
+      console.error('Error initializing Luna pal:', error);
     }
   }
 }

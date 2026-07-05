@@ -105,3 +105,7 @@ e2e/specs/visual-capture/TASK-*.spec.ts
 # screenshot inventories). Live in the dev-team repo and are sometimes
 # synced into the worktree for local reference; never committed here.
 workflows/
+# Luna local build artifacts
+.android-sdk/
+.toolchains/
+.env

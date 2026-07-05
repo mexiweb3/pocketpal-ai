@@ -566,8 +566,14 @@ export interface Model {
 
 export type RootDrawerParamList = {
   Chat: undefined;
+  Luna: undefined;
   Models: undefined;
+  'Pals (experimental)': undefined;
+  Benchmark: undefined;
   Settings: undefined;
+  'App Info': undefined;
+  'Dev Tools': undefined;
+  BenchmarkRunner: undefined;
 };
 
 export type TokenNativeEvent = {
