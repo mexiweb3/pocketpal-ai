@@ -6,7 +6,11 @@ apply plugin: "com.facebook.react"
 // Add the Google Services plugin dependency
 // This is used exclusively for sending benchmarks (with user consent) to Hugging Face Spaces via Firebase.
 // Firebase is used for App Check functionality, allowing unauthenticated users to submit their benchmark data securely.
-apply plugin: "com.google.gms.google-services"
+// Luna (compa) es 100% on-device y corre en modo avion: NO usa Firebase. El plugin
+// exige google-services.json y App Check solo se invoca en benchmark/feedback (rutas
+// que la UX de Luna nunca abre), asi que lo desactivamos para poder construir sin
+// telemetria ni phone-home. Los AAR de firebase-appcheck quedan latentes.
+// apply plugin: "com.google.gms.google-services"
 
 apply from: "../../node_modules/react-native-config/android/dotenv.gradle"
 
