@@ -4,7 +4,7 @@ import type {
   AudioStreamConfig,
   AudioStreamData,
   AudioStreamInterface,
-} from 'whisper.rn/realtime-transcription/index';
+} from 'whisper.rn/realtime-transcription';
 
 type NativeAudioPcmStream = {
   initialize(config: AudioStreamConfig): Promise<void>;

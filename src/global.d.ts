@@ -76,7 +76,7 @@ declare module 'whisper.rn' {
   }): Promise<WhisperVadContext>;
 }
 
-declare module 'whisper.rn/realtime-transcription/index' {
+declare module 'whisper.rn/realtime-transcription' {
   import type {
     TranscribeOptions,
     TranscribeResult,

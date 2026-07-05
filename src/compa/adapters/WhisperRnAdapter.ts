@@ -8,8 +8,8 @@ import {
 import {
   RealtimeTranscriber,
   RingBufferVad,
-} from 'whisper.rn/realtime-transcription/index';
-import type {AudioStreamInterface} from 'whisper.rn/realtime-transcription/index';
+} from 'whisper.rn/realtime-transcription';
+import type {AudioStreamInterface} from 'whisper.rn/realtime-transcription';
 
 import type {STTAdapter} from './STTAdapter';
 import {CompaAudioPcmStream} from './native/CompaAudioPcmStream';
