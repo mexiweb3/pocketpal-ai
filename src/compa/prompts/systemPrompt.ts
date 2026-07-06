@@ -13,10 +13,15 @@ export async function buildSystemPrompt(): Promise<string> {
     month: 'long',
     year: 'numeric',
   });
-  const hora = now.toLocaleTimeString('es-MX', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  // Parte del dia en vez de hora con minutos: el system prompt es el prefijo
+  // del contexto y llama.cpp reutiliza el KV-cache solo si el prefijo es
+  // IDENTICO entre turnos. Una hora que cambia cada minuto invalidaba el
+  // cache y obligaba a re-procesar toda la carta (~60s en telefono) en cada
+  // turno. La granularidad "madrugada/manana/tarde/noche" es estable durante
+  // la conversacion y suficiente para la conciencia temporal de Luna.
+  const h = now.getHours();
+  const hora =
+    h < 6 ? 'la madrugada' : h < 12 ? 'la mañana' : h < 19 ? 'la tarde' : 'la noche';
 
   let memoria = memoryStore.formatForPrompt([]);
   let recordatorios: string | null = '';

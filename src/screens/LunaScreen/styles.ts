@@ -8,62 +8,88 @@ export const createStyles = (theme: Theme) =>
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
-      paddingHorizontal: 24,
-      paddingVertical: 32,
-      gap: 24,
-    },
-    header: {
-      gap: 8,
-    },
-    title: {
-      color: theme.colors.onBackground,
-      fontWeight: '600',
-    },
-    subtitle: {
-      color: theme.colors.onSurfaceVariant,
-    },
-    statusBand: {
-      minHeight: 96,
-      justifyContent: 'center',
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderColor: theme.colors.outlineVariant,
-      paddingVertical: 18,
-      gap: 12,
-    },
-    statusRow: {
+    statusStrip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderColor: theme.colors.outlineVariant,
     },
-    statusDot: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-    },
-    statusText: {
-      color: theme.colors.onBackground,
-      fontWeight: '600',
-    },
-    detailText: {
+    statusStripText: {
+      flex: 1,
       color: theme.colors.onSurfaceVariant,
     },
-    controls: {
-      gap: 12,
+    statusDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
     },
-    button: {
+    chatList: {
+      flex: 1,
+    },
+    chatContent: {
+      padding: 16,
+      gap: 10,
+      flexGrow: 1,
+    },
+    // Burbujas grandes y de alto contraste: la lee un señor de ~80 años.
+    bubble: {
+      maxWidth: '85%',
+      borderRadius: 18,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    bubbleUser: {
+      alignSelf: 'flex-end',
+      backgroundColor: theme.colors.primaryContainer,
+      borderBottomRightRadius: 4,
+    },
+    bubbleLuna: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.colors.surfaceVariant,
+      borderBottomLeftRadius: 4,
+    },
+    bubbleText: {
+      fontSize: 18,
+      lineHeight: 26,
+      color: theme.colors.onSurface,
+    },
+    bubbleTextUser: {
+      color: theme.colors.onPrimaryContainer,
+    },
+    emptyHint: {
+      textAlign: 'center',
+      color: theme.colors.onSurfaceVariant,
+      marginTop: 40,
+      paddingHorizontal: 24,
+      fontSize: 16,
+      lineHeight: 24,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderColor: theme.colors.outlineVariant,
+    },
+    textInput: {
+      flex: 1,
       minHeight: 48,
-      justifyContent: 'center',
+      maxHeight: 120,
+      borderRadius: 24,
+      backgroundColor: theme.colors.surfaceVariant,
+      color: theme.colors.onSurface,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 18,
     },
     error: {
       color: theme.colors.error,
-    },
-    loadingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 6,
     },
   });

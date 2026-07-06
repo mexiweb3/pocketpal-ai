@@ -1,6 +1,13 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {PermissionsAndroid, Platform, View} from 'react-native';
-import {Button, ActivityIndicator, Text} from 'react-native-paper';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  PermissionsAndroid,
+  Platform,
+  TextInput,
+  View,
+} from 'react-native';
+import {ActivityIndicator, IconButton, Text} from 'react-native-paper';
 import {SafeAreaView} from 'react-native-safe-area-context';
 
 import {
@@ -9,6 +16,7 @@ import {
   SmsManagerAdapter,
   WhisperRnAdapter,
 } from '../../compa/adapters';
+import type {Msg} from '../../compa/adapters';
 import {FAMILY_PHONE} from '../../compa/config/family';
 import {VoiceLoop, type LoopState} from '../../compa/core';
 import type {EmergencyRecord} from '../../compa/core/safetyLayer';
@@ -25,20 +33,17 @@ import {
   installCompaMemoryStoreExecutor,
 } from '../../database';
 import {useTheme} from '../../hooks';
+import {modelStore} from '../../store/ModelStore';
+import {LUNA_QWEN_MODEL_ID} from '../../store/builtinPalModels';
 import {createStyles} from './styles';
+
+type ChatMsg = {id: string; role: 'user' | 'assistant'; text: string};
 
 const statusLabel: Record<LoopState, string> = {
   idle: 'Lista',
   listening: 'Escuchando',
-  thinking: 'Pensando',
+  thinking: 'Escribiendo',
   speaking: 'Hablando',
-};
-
-const statusDetail: Record<LoopState, string> = {
-  idle: 'Toca Iniciar para platicar con Luna.',
-  listening: 'Luna esta oyendo.',
-  thinking: 'Luna esta preparando respuesta local.',
-  speaking: 'Luna esta respondiendo.',
 };
 
 async function requestRecordAudioPermission(): Promise<boolean> {
@@ -94,51 +99,53 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+/** Carga el modelo a RAM y procesa la carta una vez (KV cache tibio) para que
+ *  el primer mensaje real no pague ni la carga (7s) ni el prompt (~1 min). */
+async function preloadBrain(): Promise<void> {
+  const qwen = modelStore.models.find(m => m.id === LUNA_QWEN_MODEL_ID);
+  if (qwen && (qwen.isDownloaded || qwen.isLocal) && !modelStore.engine) {
+    await modelStore.selectModel(qwen);
+  }
+  const warm = new LlamaRnAdapter();
+  const system = await buildSystemPrompt();
+  const messages: Msg[] = [
+    {role: 'system', content: system},
+    {role: 'user', content: 'Hola'},
+  ];
+  await warm.completion(messages, {nPredict: 1}, () => true);
+}
+
 export const LunaScreen: React.FC = () => {
   const theme = useTheme();
   const styles = createStyles(theme);
   const loopRef = useRef<VoiceLoop | null>(null);
   const mountedRef = useRef(true);
   const bootedRef = useRef(false);
+  const msgSerial = useRef(0);
+  const listRef = useRef<FlatList<ChatMsg>>(null);
+
   const [loopState, setLoopState] = useState<LoopState>('idle');
-  const [isStarting, setIsStarting] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [provision, setProvision] = useState<ProvisionProgress | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [chatReady, setChatReady] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [draft, setDraft] = useState('');
+  const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const stopLoop = useCallback(async () => {
-    const loop = loopRef.current;
-    loopRef.current = null;
-    setIsRunning(false);
-    setIsStarting(false);
-    try {
-      await loop?.destroy();
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(errorMessage(err));
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoopState('idle');
-      }
-    }
+  const pushMessage = useCallback((role: ChatMsg['role'], text: string) => {
+    msgSerial.current += 1;
+    const id = `m${msgSerial.current}`;
+    setMessages(prev => [...prev, {id, role, text}]);
   }, []);
 
-  const startLoop = useCallback(async () => {
-    if (loopRef.current || isStarting) {
-      return;
-    }
-
-    setIsStarting(true);
-    setError(null);
-    try {
-      const hasAudioPermission = await requestRecordAudioPermission();
-      if (!hasAudioPermission) {
-        throw new Error('Permiso de microfono denegado.');
+  const ensureLoop = useCallback(
+    (familyPhone: string): VoiceLoop => {
+      if (loopRef.current) {
+        return loopRef.current;
       }
-      const hasSmsPermission = await requestSendSmsPermission(FAMILY_PHONE);
-      const familyPhone = hasSmsPermission ? FAMILY_PHONE : '';
-
       installCompaMemoryStoreExecutor();
       const loop = new VoiceLoop(
         {
@@ -157,41 +164,32 @@ export const LunaScreen: React.FC = () => {
               setLoopState(state);
             }
           },
+          onUserTurn: text => {
+            if (mountedRef.current) {
+              pushMessage('user', text);
+            }
+          },
+          onAssistantDelta: textSoFar => {
+            if (mountedRef.current) {
+              setDraft(textSoFar);
+            }
+          },
+          onAssistantTurn: text => {
+            if (mountedRef.current) {
+              setDraft('');
+              pushMessage('assistant', text);
+            }
+          },
         },
       );
-
       loopRef.current = loop;
-      await loop.start();
-      if (mountedRef.current) {
-        setIsRunning(true);
-        if (FAMILY_PHONE && Platform.OS === 'android' && !hasSmsPermission) {
-          setError(
-            'Permiso de SMS denegado. Luna abrira un fallback visible si detecta emergencia.',
-          );
-        }
-      }
-    } catch (err) {
-      const loop = loopRef.current;
-      loopRef.current = null;
-      await loop?.destroy().catch(() => undefined);
-      if (mountedRef.current) {
-        setError(errorMessage(err));
-        setLoopState('idle');
-        setIsRunning(false);
-      }
-    } finally {
-      if (mountedRef.current) {
-        setIsStarting(false);
-      }
-    }
-  }, [isStarting]);
+      return loop;
+    },
+    [pushMessage],
+  );
 
-  /** Provisioning + arranque: descarga lo que falte (primer uso) y abre el
-   *  microfono solo, sin que el usuario decida nada. Reintentable con Iniciar. */
+  /** Provisioning (primer uso) + loop de chat listo + cerebro precargado. */
   const bootstrap = useCallback(async () => {
-    if (loopRef.current || isStarting) {
-      return;
-    }
     setError(null);
     try {
       if (await lunaNeedsProvisioning()) {
@@ -209,11 +207,31 @@ export const LunaScreen: React.FC = () => {
       }
       return;
     }
-    if (mountedRef.current) {
-      setProvision(null);
-      await startLoop();
+    if (!mountedRef.current) {
+      return;
     }
-  }, [isStarting, startLoop]);
+    setProvision(null);
+
+    // SMS para emergencias (aplica a chat y voz). Si se niega, hay fallback.
+    const hasSms = await requestSendSmsPermission(FAMILY_PHONE);
+    ensureLoop(hasSms ? FAMILY_PHONE : '');
+    if (mountedRef.current) {
+      setChatReady(true);
+    }
+
+    // Precarga en segundo plano: el chat ya funciona, solo que el primer
+    // mensaje seria lento; esto lo absorbe aqui.
+    setPreparing(true);
+    try {
+      await preloadBrain();
+    } catch (err) {
+      console.warn('[LunaScreen] Precarga del cerebro fallo (no fatal)', err);
+    } finally {
+      if (mountedRef.current) {
+        setPreparing(false);
+      }
+    }
+  }, [ensureLoop]);
 
   useEffect(() => {
     if (!bootedRef.current) {
@@ -228,15 +246,67 @@ export const LunaScreen: React.FC = () => {
       mountedRef.current = false;
       const loop = loopRef.current;
       loopRef.current = null;
-      void loop?.destroy().catch(error => {
-        console.warn('[LunaScreen] No se pudo cerrar VoiceLoop', error);
+      void loop?.destroy().catch(err => {
+        console.warn('[LunaScreen] No se pudo cerrar VoiceLoop', err);
       });
     };
   }, []);
 
-  const active = isRunning || isStarting;
-  const busy = active || provision !== null;
-  const provisionPct = provision ? Math.round(provision.fraction * 100) : 0;
+  const send = useCallback(() => {
+    const loop = loopRef.current;
+    const text = input.trim();
+    if (!loop || !text || !chatReady) {
+      return;
+    }
+    setInput('');
+    setError(null);
+    pushMessage('user', text);
+    loop.submitText(text);
+  }, [input, chatReady, pushMessage]);
+
+  const toggleVoice = useCallback(async () => {
+    const loop = loopRef.current;
+    if (!loop || voiceBusy || !chatReady) {
+      return;
+    }
+    setVoiceBusy(true);
+    setError(null);
+    try {
+      if (voiceOn) {
+        await loop.stopVoice();
+        if (mountedRef.current) {
+          setVoiceOn(false);
+        }
+      } else {
+        const ok = await requestRecordAudioPermission();
+        if (!ok) {
+          throw new Error('Permiso de microfono denegado.');
+        }
+        await loop.start();
+        if (mountedRef.current) {
+          setVoiceOn(true);
+        }
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(errorMessage(err));
+      }
+    } finally {
+      if (mountedRef.current) {
+        setVoiceBusy(false);
+      }
+    }
+  }, [voiceOn, voiceBusy, chatReady]);
+
+  const busyIndicator =
+    provision !== null || preparing || loopState === 'thinking' || voiceBusy;
+  const statusText = provision
+    ? `Preparando a Luna: descargando ${provision.label} (${Math.round(
+        provision.fraction * 100,
+      )}%)`
+    : preparing
+      ? 'Luna se esta preparando...'
+      : statusLabel[loopState];
   const dotColor =
     loopState === 'idle'
       ? theme.colors.outline
@@ -244,67 +314,27 @@ export const LunaScreen: React.FC = () => {
         ? theme.colors.tertiary
         : theme.colors.primary;
 
+  const listData: ChatMsg[] = draft
+    ? [...messages, {id: 'draft', role: 'assistant', text: draft}]
+    : messages;
+
   return (
     <SafeAreaView edges={['bottom']} style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text variant="headlineMedium" style={styles.title}>
-            Luna
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.statusStrip}>
+          <View style={[styles.statusDot, {backgroundColor: dotColor}]} />
+          <Text variant="bodyMedium" style={styles.statusStripText}>
+            {statusText}
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Platique con Luna. Todo queda en este telefono.
-          </Text>
-        </View>
-
-        <View style={styles.statusBand}>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, {backgroundColor: dotColor}]} />
-            <Text variant="titleMedium" style={styles.statusText}>
-              {provision
-                ? 'Preparando a Luna'
-                : isStarting
-                  ? 'Iniciando'
-                  : statusLabel[loopState]}
-            </Text>
-          </View>
-          <Text variant="bodyMedium" style={styles.detailText}>
-            {provision
-              ? `Descargando ${provision.label}: ${provisionPct}%`
-              : isStarting
-                ? 'Abriendo el microfono.'
-                : statusDetail[loopState]}
-          </Text>
-          {provision || isStarting || loopState === 'thinking' ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator animating color={theme.colors.primary} />
-              <Text variant="bodySmall" style={styles.detailText}>
-                {provision
-                  ? 'Solo esta primera vez, con internet.'
-                  : 'Procesando'}
-              </Text>
-            </View>
+          {busyIndicator ? (
+            <ActivityIndicator
+              animating
+              size={16}
+              color={theme.colors.primary}
+            />
           ) : null}
-        </View>
-
-        <View style={styles.controls}>
-          <Button
-            mode="contained"
-            icon="microphone"
-            disabled={busy}
-            onPress={bootstrap}
-            style={styles.button}
-            testID="luna-start-button">
-            Iniciar
-          </Button>
-          <Button
-            mode="outlined"
-            icon="stop-circle-outline"
-            disabled={!active}
-            onPress={stopLoop}
-            style={styles.button}
-            testID="luna-stop-button">
-            Detener
-          </Button>
         </View>
 
         {error ? (
@@ -312,7 +342,69 @@ export const LunaScreen: React.FC = () => {
             {error}
           </Text>
         ) : null}
-      </View>
+
+        <FlatList
+          ref={listRef}
+          data={listData}
+          keyExtractor={m => m.id}
+          style={styles.chatList}
+          contentContainerStyle={styles.chatContent}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({animated: true})
+          }
+          ListEmptyComponent={
+            <Text style={styles.emptyHint}>
+              {chatReady
+                ? 'Luna esta lista. Escribale aqui abajo, o toque el microfono para hablarle.'
+                : 'Un momento, Luna se esta preparando...'}
+            </Text>
+          }
+          renderItem={({item}) => (
+            <View
+              style={[
+                styles.bubble,
+                item.role === 'user' ? styles.bubbleUser : styles.bubbleLuna,
+              ]}>
+              <Text
+                style={[
+                  styles.bubbleText,
+                  item.role === 'user' ? styles.bubbleTextUser : null,
+                ]}>
+                {item.text}
+              </Text>
+            </View>
+          )}
+        />
+
+        <View style={styles.inputRow}>
+          <IconButton
+            icon={voiceOn ? 'microphone' : 'microphone-outline'}
+            mode={voiceOn ? 'contained' : 'outlined'}
+            size={26}
+            disabled={!chatReady || voiceBusy}
+            onPress={toggleVoice}
+            testID="luna-voice-toggle"
+          />
+          <TextInput
+            style={styles.textInput}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Escribale a Luna..."
+            placeholderTextColor={theme.colors.onSurfaceVariant}
+            multiline
+            editable={chatReady}
+            testID="luna-chat-input"
+          />
+          <IconButton
+            icon="send"
+            mode="contained"
+            size={26}
+            disabled={!chatReady || !input.trim()}
+            onPress={send}
+            testID="luna-send-button"
+          />
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

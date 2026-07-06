@@ -43,6 +43,12 @@ export interface VoiceLoopOptions {
   buildSystemPrompt: SystemPromptBuilder;
   runTool: ToolRunner;
   recordEmergency?: EmergencyRecorder;
+  /** Transcript para la UI de chat: se emite para turnos de voz Y de texto. */
+  onUserTurn?: (text: string) => void;
+  /** Respuesta en streaming (texto acumulado hasta ahora). */
+  onAssistantDelta?: (textSoFar: string) => void;
+  /** Respuesta final del turno (ya persistida en historial). */
+  onAssistantTurn?: (text: string) => void;
 }
 
 const WINDOW_TURNS = 12; // ventana de historial para el 4B
@@ -60,6 +66,7 @@ export class VoiceLoop {
   private turnSerial = 0;
   private stopListening: () => Promise<void> = async () => {};
   private destroyed = false;
+  private voiceActive = false;
 
   constructor(
     private adapters: VoiceLoopAdapters,
@@ -90,18 +97,51 @@ export class VoiceLoop {
           return;
         }
         console.log('[VoiceLoop] final aceptado:', JSON.stringify(trimmed));
-        this.enqueueUtterance(trimmed);
+        this.enqueueUtterance(trimmed, {speak: true, echoUser: true});
       },
     });
     console.log('[VoiceLoop] STT iniciado; esperando voz');
     this.stopListening = () => this.adapters.stt.stop();
+    this.voiceActive = true;
+  }
+
+  /** Apaga solo el modo voz (STT + TTS en curso); el chat de texto sigue vivo. */
+  async stopVoice(): Promise<void> {
+    if (this.destroyed || !this.voiceActive) return;
+    this.voiceActive = false;
+    this.generation += 1;
+    this.adapters.tts.stop();
+    try {
+      await this.stopListening();
+    } catch (e) {
+      console.warn('[VoiceLoop] No se pudo detener STT', e);
+    }
+    this.stopListening = async () => {};
+    this.setState('idle');
+  }
+
+  /** Entrada de texto (chat): mismo cerebro que la voz — safety, tools,
+   *  carta, memoria — pero sin exigir microfono. Solo habla la respuesta
+   *  si el modo voz esta activo; la UI siempre la recibe via callbacks. */
+  submitText(text: string): void {
+    const trimmed = text.trim();
+    if (this.destroyed || !trimmed) return;
+    // echoUser:false — la UI de chat ya pinto el mensaje del usuario al enviarlo.
+    this.enqueueUtterance(trimmed, {speak: this.voiceActive, echoUser: false});
   }
 
   private acceptsSttInput(): boolean {
     return this.state === 'listening';
   }
 
-  private enqueueUtterance(text: string): void {
+  private restingState(): LoopState {
+    return this.voiceActive ? 'listening' : 'idle';
+  }
+
+  private enqueueUtterance(
+    text: string,
+    opts: {speak: boolean; echoUser?: boolean},
+  ): void {
     if (this.destroyed) return;
     const previousTurn = this.turnPromise;
     const turnSerial = ++this.turnSerial;
@@ -110,7 +150,7 @@ export class VoiceLoop {
     const turn = (async () => {
       await previousTurn.catch(() => undefined);
       if (this.destroyed) return;
-      await this.handleUtterance(text);
+      await this.handleUtterance(text, opts);
     })();
 
     this.turnPromise = turn
@@ -123,15 +163,21 @@ export class VoiceLoop {
           turnSerial === this.turnSerial &&
           this.state !== 'idle'
         ) {
-          this.setState('listening');
+          this.setState(this.restingState());
         }
       });
   }
 
-  private async handleUtterance(text: string): Promise<void> {
+  private async handleUtterance(
+    text: string,
+    opts: {speak: boolean; echoUser?: boolean},
+  ): Promise<void> {
     if (this.destroyed) return;
     this.resetIdleTimer();
     this.history.push({role: 'user', content: text});
+    if (opts.echoUser) {
+      this.options.onUserTurn?.(text);
+    }
     await this.persistTurn({role: 'user', content: text}, this.history.length);
     if (this.destroyed) return;
 
@@ -150,7 +196,8 @@ export class VoiceLoop {
         {role: 'assistant', content: emergency.reply},
         this.history.length,
       );
-      return this.speak(emergency.reply);
+      this.options.onAssistantTurn?.(emergency.reply);
+      return this.deliverReply(emergency.reply, opts.speak);
     }
     if (intent.type === 'tool') {
       const reply = await this.runTool(intent.tool);
@@ -160,10 +207,11 @@ export class VoiceLoop {
         {role: 'assistant', content: reply},
         this.history.length,
       );
-      return this.speak(reply);
+      this.options.onAssistantTurn?.(reply);
+      return this.deliverReply(reply, opts.speak);
     }
 
-    // 2) LLM con streaming oración-por-oración → TTS
+    // 2) LLM con streaming: oración-por-oración → TTS (voz) y delta → UI (chat)
     this.setState('thinking');
     const myGen = ++this.generation;
     const system = await this.options.buildSystemPrompt();
@@ -172,6 +220,7 @@ export class VoiceLoop {
     let pending = '';
     let fullReply = '';
     const speakChunk = (chunk: string) => {
+      if (!opts.speak) return;
       if (this.isGenerationCancelled(myGen) || !chunk.trim()) return;
       this.setState('speaking');
       this.adapters.tts.speakStreaming(chunk);
@@ -193,6 +242,7 @@ export class VoiceLoop {
         if (this.isGenerationCancelled(myGen)) return false; // corta generación
         pending += tok;
         fullReply += tok;
+        this.options.onAssistantDelta?.(fullReply);
         // despacha al TTS en cuanto hay oración completa
         const m = pending.match(/^(.+?[.!?…])\s/s);
         if (m) {
@@ -213,13 +263,24 @@ export class VoiceLoop {
       };
       this.history.push(assistantTurn);
       await this.persistTurn(assistantTurn, this.history.length);
+      this.options.onAssistantTurn?.(assistantTurn.content);
     }
-    if (!this.isGenerationCancelled(myGen)) {
+    if (opts.speak && !this.isGenerationCancelled(myGen)) {
       await this.waitForSpeechDone(myGen);
     }
     if (!this.isGenerationCancelled(myGen)) {
-      this.setState('listening');
+      this.setState(this.restingState());
     }
+  }
+
+  /** Entrega una respuesta ya lista: por voz si aplica, y regresa al estado
+   *  de reposo (listening en modo voz, idle en modo chat). */
+  private async deliverReply(text: string, speak: boolean): Promise<void> {
+    if (this.destroyed) return;
+    if (speak) {
+      return this.speak(text);
+    }
+    this.setState(this.restingState());
   }
 
   private async runTool(tool: ToolName): Promise<string> {
@@ -249,7 +310,7 @@ export class VoiceLoop {
     this.adapters.tts.speakStreaming(text);
     await this.waitForSpeechDone(myGen);
     if (!this.isGenerationCancelled(myGen)) {
-      this.setState('listening');
+      this.setState(this.restingState());
     }
   }
 
@@ -317,6 +378,7 @@ export class VoiceLoop {
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.generation += 1;
+    this.voiceActive = false;
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = undefined;
