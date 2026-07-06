@@ -112,7 +112,7 @@ async function preloadBrain(): Promise<void> {
     {role: 'system', content: system},
     {role: 'user', content: 'Hola'},
   ];
-  await warm.completion(messages, {nPredict: 1}, () => true);
+  await warm.completion(messages, {nPredict: 1, temperature: 0}, () => true);
 }
 
 export const LunaScreen: React.FC = () => {
