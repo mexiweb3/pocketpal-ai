@@ -98,7 +98,8 @@ export class WhisperRnAdapter implements STTAdapter {
       sampleRate: 16000,
       inferenceIntervalMs: 500,
       speechRateThreshold: 0.3,
-      logger: () => {},
+      // Diagnostico: pipeline STT instrumentado (adb logcat -s ReactNativeJS)
+      logger: m => console.log('[CompaVAD]', m),
     });
     this.clearPendingFinal();
     this.lastFinalKey = '';
@@ -119,15 +120,24 @@ export class WhisperRnAdapter implements STTAdapter {
           translate: false,
         },
         realtimeProcessingPauseMs: 700,
+        logger: m => console.log('[CompaRT]', m),
       },
       {
         onSliceTranscriptionStabilized: text => {
+          console.log('[CompaSTT] final estabilizado:', JSON.stringify(text));
           const trimmed = text.trim();
           if (trimmed && !isSilenceHallucination(trimmed)) {
             this.queueFinal(trimmed, opts.onFinal);
           }
         },
         onTranscribe: event => {
+          console.log(
+            '[CompaSTT] evento:',
+            event.type,
+            'slice',
+            event.sliceIndex,
+            JSON.stringify(event.data?.result?.slice(0, 80) ?? ''),
+          );
           if (event.type !== 'transcribe') {
             return;
           }
@@ -142,6 +152,7 @@ export class WhisperRnAdapter implements STTAdapter {
       },
     );
     await this.transcriber.start();
+    console.log('[CompaSTT] transcriber iniciado (modelos cargados, stream de audio arrancado)');
   }
 
   async stop(): Promise<void> {

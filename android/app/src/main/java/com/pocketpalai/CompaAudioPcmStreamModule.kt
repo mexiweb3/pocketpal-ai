@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Base64
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -118,11 +119,14 @@ class CompaAudioPcmStreamModule(
 
     recorder = audioRecord
     recording = true
+    // Diagnostico STT: confirmar parametros reales de captura en logcat -s CompaPCM
+    Log.d("CompaPCM", "AudioRecord grabando: rate=$sampleRate ch=$channels buf=$size")
     emitStatus(true)
 
     worker = Thread {
       val buffer = ByteArray(size)
       var stoppedByReadError = false
+      var firstRead = true
       while (recording) {
         val read: Int
         try {
@@ -134,6 +138,10 @@ class CompaAudioPcmStreamModule(
           break
         }
         if (read > 0) {
+          if (firstRead) {
+            firstRead = false
+            Log.d("CompaPCM", "primer read=$read bytes; emitiendo a JS")
+          }
           val payload = Base64.encodeToString(buffer.copyOf(read), Base64.NO_WRAP)
           val event = Arguments.createMap().apply {
             putString("data", payload)
@@ -222,6 +230,7 @@ class CompaAudioPcmStreamModule(
   }
 
   private fun emitError(code: String, message: String) {
+    Log.w("CompaPCM", "$code: $message")
     val event = Arguments.createMap().apply {
       putString("code", code)
       putString("error", message)

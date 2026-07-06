@@ -135,6 +135,7 @@ declare module 'whisper.rn/realtime-transcription' {
         maxSlicesInMemory?: number;
         transcribeOptions?: TranscribeOptions;
         realtimeProcessingPauseMs?: number;
+        logger?: (message: string) => void;
       },
       callbacks?: {
         onSliceTranscriptionStabilized?: (text: string) => void;

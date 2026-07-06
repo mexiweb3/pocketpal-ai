@@ -77,13 +77,23 @@ export class VoiceLoop {
       lang: 'es',
       onPartial: text => {
         if (this.destroyed || !text.trim() || !this.acceptsSttInput()) return;
+        console.log('[VoiceLoop] parcial:', JSON.stringify(text.slice(0, 80)));
       },
       onFinal: text => {
         const trimmed = text.trim();
-        if (this.destroyed || !trimmed || !this.acceptsSttInput()) return;
+        if (this.destroyed || !trimmed) return;
+        if (!this.acceptsSttInput()) {
+          console.warn(
+            '[VoiceLoop] final DESCARTADO (state=' + this.state + '):',
+            JSON.stringify(trimmed.slice(0, 80)),
+          );
+          return;
+        }
+        console.log('[VoiceLoop] final aceptado:', JSON.stringify(trimmed));
         this.enqueueUtterance(trimmed);
       },
     });
+    console.log('[VoiceLoop] STT iniciado; esperando voz');
     this.stopListening = () => this.adapters.stt.stop();
   }
 

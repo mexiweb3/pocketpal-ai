@@ -28,6 +28,7 @@ const emitter = nativeModule ? new NativeEventEmitter(nativeModule as any) : nul
 
 export class CompaAudioPcmStream implements AudioStreamInterface {
   private recording = false;
+  private chunkCount = 0;
   private dataCallback: (data: AudioStreamData) => void = () => {};
   private errorCallback: (error: string) => void = () => {};
   private statusCallback: (isRecording: boolean) => void = () => {};
@@ -41,14 +42,23 @@ export class CompaAudioPcmStream implements AudioStreamInterface {
     await nativeModule.initialize(config);
     this.subscriptions = [
       emitter.addListener('CompaAudioPcmStreamData', (event: NativeDataEvent) => {
+        const bytes = toByteArray(event.data);
+        this.chunkCount += 1;
+        // Diagnostico: confirmar que el audio nativo llega a JS.
+        if (this.chunkCount === 1 || this.chunkCount % 100 === 0) {
+          console.log(
+            `[CompaPCM] chunk #${this.chunkCount}: ${bytes.length} bytes @${event.sampleRate}Hz ch${event.channels}`,
+          );
+        }
         this.dataCallback({
-          data: toByteArray(event.data),
+          data: bytes,
           sampleRate: event.sampleRate,
           channels: event.channels,
           timestamp: event.timestamp,
         });
       }),
       emitter.addListener('CompaAudioPcmStreamError', (event: {error: string}) => {
+        console.warn('[CompaPCM] error nativo:', event.error);
         this.errorCallback(event.error);
       }),
       emitter.addListener(
