@@ -3,6 +3,12 @@ import {LUNA_QWEN_MODEL_ID} from '../../store/builtinPalModels';
 import type {LLMAdapter, Msg} from './LLMAdapter';
 
 export class LlamaRnAdapter implements LLMAdapter {
+  /** Cola global: llama.rn lanza "Context is busy" si dos completions tocan el
+   *  mismo contexto a la vez (p.ej. el warmup de LunaScreen vs el primer
+   *  mensaje del usuario). Encadenar TODAS las completions de Luna en una sola
+   *  promesa las serializa sin importar que instancia del adapter las pida. */
+  private static chain: Promise<unknown> = Promise.resolve();
+
   private async ensureEngine() {
     if (modelStore.engine) {
       return modelStore.engine;
@@ -25,6 +31,18 @@ export class LlamaRnAdapter implements LLMAdapter {
   }
 
   async completion(
+    messages: Msg[],
+    opts: {nPredict: number; temperature: number; stop?: string[]},
+    onToken: (tok: string) => boolean,
+  ): Promise<string> {
+    const run = LlamaRnAdapter.chain
+      .catch(() => undefined)
+      .then(() => this.doCompletion(messages, opts, onToken));
+    LlamaRnAdapter.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async doCompletion(
     messages: Msg[],
     opts: {nPredict: number; temperature: number; stop?: string[]},
     onToken: (tok: string) => boolean,

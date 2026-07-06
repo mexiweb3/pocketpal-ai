@@ -1,13 +1,13 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   FlatList,
-  KeyboardAvoidingView,
   PermissionsAndroid,
   Platform,
   TextInput,
   View,
 } from 'react-native';
-import {ActivityIndicator, IconButton, Text} from 'react-native-paper';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import {ActivityIndicator, Button, IconButton, Text} from 'react-native-paper';
 import {SafeAreaView} from 'react-native-safe-area-context';
 
 import {
@@ -162,6 +162,18 @@ export const LunaScreen: React.FC = () => {
           onState: state => {
             if (mountedRef.current) {
               setLoopState(state);
+              // Al volver a reposo, cualquier draft huerfano (turno cancelado
+              // o fallido) se limpia; el turno normal ya lo vacio en
+              // onAssistantTurn antes de llegar aqui.
+              if (state === 'idle' || state === 'listening') {
+                setDraft('');
+              }
+            }
+          },
+          onTurnError: () => {
+            if (mountedRef.current) {
+              setDraft('');
+              setError('Luna no pudo responder. Intente de nuevo.');
             }
           },
           onUserTurn: text => {
@@ -212,11 +224,19 @@ export const LunaScreen: React.FC = () => {
     }
     setProvision(null);
 
-    // SMS para emergencias (aplica a chat y voz). Si se niega, hay fallback.
-    const hasSms = await requestSendSmsPermission(FAMILY_PHONE);
-    ensureLoop(hasSms ? FAMILY_PHONE : '');
-    if (mountedRef.current) {
+    try {
+      // SMS para emergencias (aplica a chat y voz). Si se niega, hay fallback.
+      const hasSms = await requestSendSmsPermission(FAMILY_PHONE);
+      if (!mountedRef.current) {
+        return;
+      }
+      ensureLoop(hasSms ? FAMILY_PHONE : '');
       setChatReady(true);
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(errorMessage(err));
+      }
+      return;
     }
 
     // Precarga en segundo plano: el chat ya funciona, solo que el primer
@@ -275,6 +295,7 @@ export const LunaScreen: React.FC = () => {
       if (voiceOn) {
         await loop.stopVoice();
         if (mountedRef.current) {
+          setDraft('');
           setVoiceOn(false);
         }
       } else {
@@ -320,9 +341,7 @@ export const LunaScreen: React.FC = () => {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.container} behavior="padding">
         <View style={styles.statusStrip}>
           <View style={[styles.statusDot, {backgroundColor: dotColor}]} />
           <Text variant="bodyMedium" style={styles.statusStripText}>
@@ -342,6 +361,15 @@ export const LunaScreen: React.FC = () => {
             {error}
           </Text>
         ) : null}
+        {error && !chatReady ? (
+          <Button
+            mode="contained"
+            style={styles.retryButton}
+            onPress={() => void bootstrap()}
+            testID="luna-retry-button">
+            Reintentar
+          </Button>
+        ) : null}
 
         <FlatList
           ref={listRef}
@@ -350,7 +378,7 @@ export const LunaScreen: React.FC = () => {
           style={styles.chatList}
           contentContainerStyle={styles.chatContent}
           onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({animated: true})
+            listRef.current?.scrollToEnd({animated: false})
           }
           ListEmptyComponent={
             <Text style={styles.emptyHint}>

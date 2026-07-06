@@ -49,6 +49,9 @@ export interface VoiceLoopOptions {
   onAssistantDelta?: (textSoFar: string) => void;
   /** Respuesta final del turno (ya persistida en historial). */
   onAssistantTurn?: (text: string) => void;
+  /** Fallo de un turno (LLM caido, contexto ocupado, etc.) para mostrarlo
+   *  en la UI en vez de tragarlo en silencio. */
+  onTurnError?: (error: unknown) => void;
 }
 
 const WINDOW_TURNS = 12; // ventana de historial para el 4B
@@ -79,7 +82,21 @@ export class VoiceLoop {
     if (this.destroyed) return;
     await this.startMemorySession();
     if (this.destroyed) return;
+    // voiceActive ANTES del await: si un turno de texto termina mientras
+    // Whisper inicializa, su restingState() ya debe decir 'listening' (si no,
+    // el mic quedaria encendido pero sordo: state='idle' gatea los finales).
+    this.voiceActive = true;
     this.setState('listening');
+    try {
+      await this.startStt();
+    } catch (e) {
+      this.voiceActive = false;
+      this.setState('idle');
+      throw e;
+    }
+  }
+
+  private async startStt(): Promise<void> {
     await this.adapters.stt.start({
       lang: 'es',
       onPartial: text => {
@@ -102,7 +119,6 @@ export class VoiceLoop {
     });
     console.log('[VoiceLoop] STT iniciado; esperando voz');
     this.stopListening = () => this.adapters.stt.stop();
-    this.voiceActive = true;
   }
 
   /** Apaga solo el modo voz (STT + TTS en curso); el chat de texto sigue vivo. */
@@ -145,7 +161,14 @@ export class VoiceLoop {
     if (this.destroyed) return;
     const previousTurn = this.turnPromise;
     const turnSerial = ++this.turnSerial;
-    this.interrupt('thinking');
+    // Barge-in SOLO en modo voz. En chat puro, un segundo mensaje del usuario
+    // no debe cancelar la respuesta en curso al primero: los turnos ya se
+    // serializan via turnPromise y ambas respuestas llegan.
+    if (this.voiceActive) {
+      this.interrupt('thinking');
+    } else {
+      this.setState('thinking');
+    }
 
     const turn = (async () => {
       await previousTurn.catch(() => undefined);
@@ -156,6 +179,9 @@ export class VoiceLoop {
     this.turnPromise = turn
       .catch(e => {
         console.warn('[VoiceLoop] Fallo al procesar turno', e);
+        if (!this.destroyed) {
+          this.options.onTurnError?.(e);
+        }
       })
       .finally(() => {
         if (
@@ -219,8 +245,11 @@ export class VoiceLoop {
 
     let pending = '';
     let fullReply = '';
+    let lastDeltaAt = 0;
     const speakChunk = (chunk: string) => {
-      if (!opts.speak) return;
+      // Re-verificar voiceActive al MOMENTO de hablar: opts.speak se congelo
+      // al encolar y el usuario pudo apagar el mic mientras tanto.
+      if (!opts.speak || !this.voiceActive) return;
       if (this.isGenerationCancelled(myGen) || !chunk.trim()) return;
       this.setState('speaking');
       this.adapters.tts.speakStreaming(chunk);
@@ -242,7 +271,13 @@ export class VoiceLoop {
         if (this.isGenerationCancelled(myGen)) return false; // corta generación
         pending += tok;
         fullReply += tok;
-        this.options.onAssistantDelta?.(fullReply);
+        // Throttle del delta a la UI (~6/s): un re-render por token satura un
+        // telefono modesto. onAssistantTurn hace el flush final completo.
+        const now = Date.now();
+        if (now - lastDeltaAt >= 150) {
+          lastDeltaAt = now;
+          this.options.onAssistantDelta?.(fullReply);
+        }
         // despacha al TTS en cuanto hay oración completa
         const m = pending.match(/^(.+?[.!?…])\s/s);
         if (m) {
@@ -256,7 +291,10 @@ export class VoiceLoop {
     fullReply = fullReply || result;
     const cancelled = this.isGenerationCancelled(myGen);
     if (!cancelled && pending.trim()) speakChunk(pending);
-    if (!cancelled && fullReply.trim()) {
+    // Persistir TAMBIEN el parcial de un turno cancelado (barge-in/stopVoice):
+    // lo que Luna alcanzo a decir queda en historial y la burbuja draft de la
+    // UI se finaliza en vez de quedar fantasma.
+    if (fullReply.trim()) {
       const assistantTurn = {
         role: 'assistant' as const,
         content: fullReply.trim(),
@@ -265,7 +303,7 @@ export class VoiceLoop {
       await this.persistTurn(assistantTurn, this.history.length);
       this.options.onAssistantTurn?.(assistantTurn.content);
     }
-    if (opts.speak && !this.isGenerationCancelled(myGen)) {
+    if (opts.speak && this.voiceActive && !this.isGenerationCancelled(myGen)) {
       await this.waitForSpeechDone(myGen);
     }
     if (!this.isGenerationCancelled(myGen)) {
@@ -273,11 +311,11 @@ export class VoiceLoop {
     }
   }
 
-  /** Entrega una respuesta ya lista: por voz si aplica, y regresa al estado
-   *  de reposo (listening en modo voz, idle en modo chat). */
+  /** Entrega una respuesta ya lista: por voz si el modo voz SIGUE activo al
+   *  momento de entregarla, y regresa al estado de reposo. */
   private async deliverReply(text: string, speak: boolean): Promise<void> {
     if (this.destroyed) return;
-    if (speak) {
+    if (speak && this.voiceActive) {
       return this.speak(text);
     }
     this.setState(this.restingState());

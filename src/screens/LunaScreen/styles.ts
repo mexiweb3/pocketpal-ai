@@ -92,4 +92,10 @@ export const createStyles = (theme: Theme) =>
       paddingHorizontal: 16,
       paddingVertical: 6,
     },
+    retryButton: {
+      marginHorizontal: 16,
+      marginVertical: 8,
+      minHeight: 48,
+      justifyContent: 'center',
+    },
   });
