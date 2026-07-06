@@ -35,29 +35,41 @@ export const createStyles = (theme: Theme) =>
       flexGrow: 1,
     },
     // Burbujas grandes y de alto contraste: la lee un señor de ~80 años.
+    // Colores CLARAMENTE distintos: el papá a la derecha en azul; Luna a la
+    // izquierda en morado (su color, como la luna nocturna).
     bubble: {
       maxWidth: '85%',
       borderRadius: 18,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
     },
     bubbleUser: {
       alignSelf: 'flex-end',
-      backgroundColor: theme.colors.primaryContainer,
+      backgroundColor: '#1d5fd6', // azul: mensajes de Don Jesús
       borderBottomRightRadius: 4,
     },
     bubbleLuna: {
       alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceVariant,
+      backgroundColor: '#3b2d6b', // morado luna: respuestas de Luna
       borderBottomLeftRadius: 4,
+    },
+    bubbleName: {
+      fontSize: 12,
+      fontWeight: '700',
+      marginBottom: 2,
+      color: '#c9b8ff',
+    },
+    bubbleNameUser: {
+      color: '#bcd4ff',
+      textAlign: 'right',
     },
     bubbleText: {
       fontSize: 18,
       lineHeight: 26,
-      color: theme.colors.onSurface,
+      color: '#ffffff',
     },
     bubbleTextUser: {
-      color: theme.colors.onPrimaryContainer,
+      color: '#ffffff',
     },
     emptyHint: {
       textAlign: 'center',

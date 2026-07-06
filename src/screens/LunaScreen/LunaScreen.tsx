@@ -395,6 +395,13 @@ export const LunaScreen: React.FC = () => {
               ]}>
               <Text
                 style={[
+                  styles.bubbleName,
+                  item.role === 'user' ? styles.bubbleNameUser : null,
+                ]}>
+                {item.role === 'user' ? 'Usted' : 'Luna'}
+              </Text>
+              <Text
+                style={[
                   styles.bubbleText,
                   item.role === 'user' ? styles.bubbleTextUser : null,
                 ]}>
