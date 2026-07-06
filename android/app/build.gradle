@@ -3,14 +3,16 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "org.jetbrains.kotlin.kapt"
 apply plugin: "com.facebook.react"
 
-// Add the Google Services plugin dependency
-// This is used exclusively for sending benchmarks (with user consent) to Hugging Face Spaces via Firebase.
-// Firebase is used for App Check functionality, allowing unauthenticated users to submit their benchmark data securely.
-// Luna (compa) es 100% on-device y corre en modo avion: NO usa Firebase. El plugin
-// exige google-services.json y App Check solo se invoca en benchmark/feedback (rutas
-// que la UX de Luna nunca abre), asi que lo desactivamos para poder construir sin
-// telemetria ni phone-home. Los AAR de firebase-appcheck quedan latentes.
-// apply plugin: "com.google.gms.google-services"
+// Google Services plugin — NECESARIO aunque Luna no use Firebase. El modulo nativo de
+// @react-native-firebase/app-check se instancia en el ARRANQUE (Nueva Arquitectura =
+// init EAGER de todos los TurboModules) y su constructor llama FirebaseAppCheck.getInstance(),
+// que exige un FirebaseApp por defecto YA inicializado. Sin este plugin + google-services.json
+// la app arranca con IllegalStateException ("Default FirebaseApp is not initialized") y NO ABRE.
+// Usamos un google-services.json DUMMY (compa-local-build, sin llaves reales): inicializa
+// Firebase OFFLINE (sin red); App Check solo se invoca en benchmark/feedback, rutas que la UX
+// de Luna nunca abre -> cero phone-home, y en modo avion queda inerte.
+// (Pendiente para el ethos on-device: quitar Firebase + Amplitude por completo.)
+apply plugin: "com.google.gms.google-services"
 
 apply from: "../../node_modules/react-native-config/android/dotenv.gradle"
 
