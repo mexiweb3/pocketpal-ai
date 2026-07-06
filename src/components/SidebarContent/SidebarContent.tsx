@@ -489,14 +489,11 @@ export const SidebarContent: React.FC<DrawerContentComponentProps> = observer(
     const ListHeaderComponent = React.useMemo(
       () => (
         <View>
+          {/* Luna: menu minimo. Chat/Pals/Benchmark/App Info se ocultaron a
+              proposito (branding PocketPal y rutas que el papa no debe tocar).
+              Las pantallas siguen registradas en App.tsx por si hay que
+              reactivarlas. Models y Settings quedan para mantenimiento. */}
           <Drawer.Section showDivider={false}>
-            <Drawer.Item
-              label={l10n.components.sidebarContent.menuItems.chat}
-              icon={() => <ChatIcon stroke={theme.colors.primary} />}
-              onPress={() => props.navigation.navigate(ROUTES.CHAT)}
-              style={styles.menuDrawerItem}
-              testID="drawer-item-chat"
-            />
             <Drawer.Item
               label="Luna"
               icon={() => <MoonIcon stroke={theme.colors.primary} />}
@@ -505,25 +502,11 @@ export const SidebarContent: React.FC<DrawerContentComponentProps> = observer(
               testID="drawer-item-luna"
             />
             <Drawer.Item
-              label={l10n.components.sidebarContent.menuItems.pals}
-              icon={() => <PalIcon stroke={theme.colors.primary} />}
-              onPress={() => props.navigation.navigate(ROUTES.PALS)}
-              style={styles.menuDrawerItem}
-              testID="drawer-item-pals"
-            />
-            <Drawer.Item
               label={l10n.components.sidebarContent.menuItems.models}
               icon={() => <ModelIcon stroke={theme.colors.primary} />}
               onPress={() => props.navigation.navigate(ROUTES.MODELS)}
               style={styles.menuDrawerItem}
               testID="drawer-item-models"
-            />
-            <Drawer.Item
-              label={l10n.components.sidebarContent.menuItems.benchmark}
-              icon={() => <BenchmarkIcon stroke={theme.colors.primary} />}
-              onPress={() => props.navigation.navigate(ROUTES.BENCHMARK)}
-              style={styles.menuDrawerItem}
-              testID="drawer-item-benchmark"
             />
             <Drawer.Item
               label={l10n.components.sidebarContent.menuItems.settings}
@@ -537,18 +520,6 @@ export const SidebarContent: React.FC<DrawerContentComponentProps> = observer(
               onPress={() => props.navigation.navigate(ROUTES.SETTINGS)}
               style={styles.menuDrawerItem}
               testID="drawer-item-settings"
-            />
-            <Drawer.Item
-              label={l10n.components.sidebarContent.menuItems.appInfo}
-              icon={() => (
-                <AppInfoIcon
-                  width={24}
-                  height={24}
-                  stroke={theme.colors.primary}
-                />
-              )}
-              onPress={() => props.navigation.navigate(ROUTES.APP_INFO)}
-              style={styles.menuDrawerItem}
             />
             {/* Only show Dev Tools in debug mode */}
             {isDebugMode && (
@@ -612,7 +583,9 @@ export const SidebarContent: React.FC<DrawerContentComponentProps> = observer(
             </>
           ) : (
             <SectionList
-              sections={sections}
+              // Luna: sin historial de sesiones de chat en el drawer (el flujo
+              // del papa es solo-voz; el historial navegaria a ROUTES.CHAT).
+              sections={[]}
               keyExtractor={keyExtractor}
               renderItem={renderItem}
               renderSectionHeader={renderSectionHeader}

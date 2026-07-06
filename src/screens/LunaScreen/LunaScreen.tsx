@@ -14,6 +14,11 @@ import {VoiceLoop, type LoopState} from '../../compa/core';
 import type {EmergencyRecord} from '../../compa/core/safetyLayer';
 import {memoryStore} from '../../compa/memory/MemoryStore';
 import {buildSystemPrompt} from '../../compa/prompts/systemPrompt';
+import {
+  lunaNeedsProvisioning,
+  provisionLunaAssets,
+  type ProvisionProgress,
+} from '../../compa/provisioning/LunaProvisioner';
 import {runTool} from '../../compa/tools/companionTools';
 import {
   createPocketPalSqliteExecutor,
@@ -30,7 +35,7 @@ const statusLabel: Record<LoopState, string> = {
 };
 
 const statusDetail: Record<LoopState, string> = {
-  idle: 'Toca iniciar para abrir el microfono.',
+  idle: 'Toca Iniciar para platicar con Luna.',
   listening: 'Luna esta oyendo.',
   thinking: 'Luna esta preparando respuesta local.',
   speaking: 'Luna esta respondiendo.',
@@ -94,9 +99,11 @@ export const LunaScreen: React.FC = () => {
   const styles = createStyles(theme);
   const loopRef = useRef<VoiceLoop | null>(null);
   const mountedRef = useRef(true);
+  const bootedRef = useRef(false);
   const [loopState, setLoopState] = useState<LoopState>('idle');
   const [isStarting, setIsStarting] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [provision, setProvision] = useState<ProvisionProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const stopLoop = useCallback(async () => {
@@ -179,6 +186,43 @@ export const LunaScreen: React.FC = () => {
     }
   }, [isStarting]);
 
+  /** Provisioning + arranque: descarga lo que falte (primer uso) y abre el
+   *  microfono solo, sin que el usuario decida nada. Reintentable con Iniciar. */
+  const bootstrap = useCallback(async () => {
+    if (loopRef.current || isStarting) {
+      return;
+    }
+    setError(null);
+    try {
+      if (await lunaNeedsProvisioning()) {
+        setProvision({label: 'lo necesario', fraction: 0});
+        await provisionLunaAssets(p => {
+          if (mountedRef.current) {
+            setProvision(p);
+          }
+        });
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setProvision(null);
+        setError(errorMessage(err));
+      }
+      return;
+    }
+    if (mountedRef.current) {
+      setProvision(null);
+      await startLoop();
+    }
+  }, [isStarting, startLoop]);
+
+  useEffect(() => {
+    if (!bootedRef.current) {
+      bootedRef.current = true;
+      void bootstrap();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     return () => {
       mountedRef.current = false;
@@ -191,6 +235,8 @@ export const LunaScreen: React.FC = () => {
   }, []);
 
   const active = isRunning || isStarting;
+  const busy = active || provision !== null;
+  const provisionPct = provision ? Math.round(provision.fraction * 100) : 0;
   const dotColor =
     loopState === 'idle'
       ? theme.colors.outline
@@ -206,7 +252,7 @@ export const LunaScreen: React.FC = () => {
             Luna
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            Qwen2.5-3B local, Whisper local y voz del telefono.
+            Platique con Luna. Todo queda en este telefono.
           </Text>
         </View>
 
@@ -214,19 +260,27 @@ export const LunaScreen: React.FC = () => {
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, {backgroundColor: dotColor}]} />
             <Text variant="titleMedium" style={styles.statusText}>
-              {isStarting ? 'Iniciando' : statusLabel[loopState]}
+              {provision
+                ? 'Preparando a Luna'
+                : isStarting
+                  ? 'Iniciando'
+                  : statusLabel[loopState]}
             </Text>
           </View>
           <Text variant="bodyMedium" style={styles.detailText}>
-            {isStarting
-              ? 'Preparando adapters locales.'
-              : statusDetail[loopState]}
+            {provision
+              ? `Descargando ${provision.label}: ${provisionPct}%`
+              : isStarting
+                ? 'Abriendo el microfono.'
+                : statusDetail[loopState]}
           </Text>
-          {isStarting || loopState === 'thinking' ? (
+          {provision || isStarting || loopState === 'thinking' ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator animating color={theme.colors.primary} />
               <Text variant="bodySmall" style={styles.detailText}>
-                Procesando
+                {provision
+                  ? 'Solo esta primera vez, con internet.'
+                  : 'Procesando'}
               </Text>
             </View>
           ) : null}
@@ -236,8 +290,8 @@ export const LunaScreen: React.FC = () => {
           <Button
             mode="contained"
             icon="microphone"
-            disabled={active}
-            onPress={startLoop}
+            disabled={busy}
+            onPress={bootstrap}
             style={styles.button}
             testID="luna-start-button">
             Iniciar

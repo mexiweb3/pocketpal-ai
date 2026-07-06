@@ -47,7 +47,6 @@ import {
   DevToolsScreen,
 } from './src/screens';
 import PalsScreen from './src/screens/PalsScreen';
-import {OnboardingStack} from './src/screens/OnboardingScreens';
 
 // Check if app is in debug mode
 const isDebugMode = __DEV__;
@@ -62,9 +61,11 @@ const DeepLinkHandler = () => {
   return null;
 };
 
-// Branches between the OnboardingStack (first-launch flow) and the main
-// Drawer.Navigator. Both children mount under the same provider tree —
-// switching does NOT remount providers above this point.
+// Luna: el onboarding de PocketPal se elimino a proposito — la app es para un
+// adulto mayor y debe abrir directo en LunaScreen, sin tutorial ni eleccion de
+// modelo (el provisioning corre solo en LunaScreen). No basta con defaultear
+// hasCompletedOnboarding: replayOnboarding()/resetOnboarding() podrian
+// reactivarlo, asi que aqui simplemente nunca se monta OnboardingStack.
 //
 // The hydration check is belt-and-suspenders. AppWithMigrationWrapper
 // already gates render on `isHydrated(uiStore)`, but reading the same
@@ -74,9 +75,6 @@ type SwitchPointProps = {drawer: React.ReactNode};
 const SwitchPoint: React.FC<SwitchPointProps> = observer(({drawer}) => {
   if (!isHydrated(uiStore)) {
     return null;
-  }
-  if (!uiStore.hasCompletedOnboarding) {
-    return <OnboardingStack />;
   }
   return <>{drawer}</>;
 });
@@ -113,6 +111,7 @@ const App = observer(() => {
                     <SwitchPoint
                       drawer={
                         <Drawer.Navigator
+                          initialRouteName={ROUTES.LUNA}
                           screenOptions={{
                             headerLeft: () => <HeaderLeft />,
                             drawerStyle: {
