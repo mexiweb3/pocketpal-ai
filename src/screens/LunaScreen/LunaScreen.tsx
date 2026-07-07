@@ -6,9 +6,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import {KeyboardStickyView} from 'react-native-keyboard-controller';
 import {ActivityIndicator, Button, IconButton, Text} from 'react-native-paper';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
   LlamaRnAdapter,
@@ -35,7 +35,7 @@ import {
 import {useTheme} from '../../hooks';
 import {modelStore} from '../../store/ModelStore';
 import {LUNA_QWEN_MODEL_ID} from '../../store/builtinPalModels';
-import {createStyles} from './styles';
+import {createStyles, LUNA_COLORS} from './styles';
 
 type ChatMsg = {id: string; role: 'user' | 'assistant'; text: string};
 
@@ -118,6 +118,7 @@ async function preloadBrain(): Promise<void> {
 export const LunaScreen: React.FC = () => {
   const theme = useTheme();
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const loopRef = useRef<VoiceLoop | null>(null);
   const mountedRef = useRef(true);
   const bootedRef = useRef(false);
@@ -341,7 +342,7 @@ export const LunaScreen: React.FC = () => {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.container}>
-      <KeyboardAvoidingView style={styles.container} behavior="padding">
+      <View style={styles.container}>
         <View style={styles.statusStrip}>
           <View style={[styles.statusDot, {backgroundColor: dotColor}]} />
           <Text variant="bodyMedium" style={styles.statusStripText}>
@@ -411,35 +412,39 @@ export const LunaScreen: React.FC = () => {
           )}
         />
 
-        <View style={styles.inputRow}>
-          <IconButton
-            icon={voiceOn ? 'microphone' : 'microphone-outline'}
-            mode={voiceOn ? 'contained' : 'outlined'}
-            size={26}
-            disabled={!chatReady || voiceBusy}
-            onPress={toggleVoice}
-            testID="luna-voice-toggle"
-          />
-          <TextInput
-            style={styles.textInput}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Escribale a Luna..."
-            placeholderTextColor={theme.colors.onSurfaceVariant}
-            multiline
-            editable={chatReady}
-            testID="luna-chat-input"
-          />
-          <IconButton
-            icon="send"
-            mode="contained"
-            size={26}
-            disabled={!chatReady || !input.trim()}
-            onPress={send}
-            testID="luna-send-button"
-          />
-        </View>
-      </KeyboardAvoidingView>
+        {/* La barra de escritura se pega SOBRE el teclado (como el chat de
+            PocketPal) para que el señor siempre vea lo que teclea. */}
+        <KeyboardStickyView offset={{closed: 0, opened: insets.bottom}}>
+          <View style={styles.inputRow}>
+            <IconButton
+              icon={voiceOn ? 'microphone' : 'microphone-outline'}
+              mode={voiceOn ? 'contained' : 'outlined'}
+              size={26}
+              disabled={!chatReady || voiceBusy}
+              onPress={toggleVoice}
+              testID="luna-voice-toggle"
+            />
+            <TextInput
+              style={styles.textInput}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Escribale a Luna..."
+              placeholderTextColor={LUNA_COLORS.textDim}
+              multiline
+              editable={chatReady}
+              testID="luna-chat-input"
+            />
+            <IconButton
+              icon="send"
+              mode="contained"
+              size={26}
+              disabled={!chatReady || !input.trim()}
+              onPress={send}
+              testID="luna-send-button"
+            />
+          </View>
+        </KeyboardStickyView>
+      </View>
     </SafeAreaView>
   );
 };
